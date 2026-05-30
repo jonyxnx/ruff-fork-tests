@@ -1,0 +1,68 @@
+name: Kitdoc Docs
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_sha:
+        description: "Base commit SHA (defaults to HEAD~1)"
+        required: false
+      head_sha:
+        description: "Head commit SHA (defaults to HEAD)"
+        required: false
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+env:
+  KITDOC_REPOSITORY: platanus-build-night/platanus-build-night-26-mx-jonyxnx
+  KITDOC_REF: main
+
+jobs:
+  notion-docs:
+    name: Document repo with kitdoc
+    runs-on: ubuntu-latest
+    # OPENAI_API_KEY, NOTION_TOKEN, and NOTION_PAGE_ID live in the "main" environment.
+    environment: main
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Resolve base / head SHAs
+        id: shas
+        shell: bash
+        run: |
+          BASE="${{ github.event.inputs.base_sha || github.event.before }}"
+          HEAD="${{ github.event.inputs.head_sha || github.sha }}"
+          # First push to a branch reports an all-zero `before` SHA. Fall back to HEAD~1.
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            BASE=$(git rev-parse "${HEAD}^" 2>/dev/null || echo "$HEAD")
+          fi
+          echo "base=$BASE" >> "$GITHUB_OUTPUT"
+          echo "head=$HEAD" >> "$GITHUB_OUTPUT"
+          echo "Using base=$BASE head=$HEAD"
+
+      - name: Generate and sync Notion docs
+        uses: platanus-build-night/platanus-build-night-26-mx-jonyxnx/.github/actions/kitdoc-docs@main
+        with:
+          target-repository: ${{ github.repository }}
+          target-ref: ${{ steps.shas.outputs.head }}
+          kitdoc-repository: ${{ env.KITDOC_REPOSITORY }}
+          kitdoc-ref: ${{ env.KITDOC_REF }}
+
+          base-sha: ${{ steps.shas.outputs.base }}
+          head-sha: ${{ steps.shas.outputs.head }}
+          repo-owner: ${{ github.repository_owner }}
+          repo-name: ${{ github.event.repository.name }}
+
+          llm-provider: openai
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          depth: "2"
+
+          notion-token: ${{ secrets.NOTION_TOKEN }}
+          notion-page-id: ${{ secrets.NOTION_PAGE_ID }}
