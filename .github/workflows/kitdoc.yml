@@ -17,7 +17,7 @@ permissions:
   contents: read
 
 env:
-  KITDOC_REPOSITORY: platanus-build-night/platanus-build-night-26-mx-jonyxnx
+  KITDOC_REPOSITORY: jonyxnx/hackathon-fintual
   KITDOC_REF: main
 
 jobs:
@@ -48,7 +48,7 @@ jobs:
           echo "Using base=$BASE head=$HEAD"
 
       - name: Generate and sync Notion docs
-        uses: platanus-build-night/platanus-build-night-26-mx-jonyxnx/.github/actions/kitdoc-docs@main
+        uses: jonyxnx/hackathon-fintual/.github/actions/kitdoc-docs@main
         with:
           target-repository: ${{ github.repository }}
           target-ref: ${{ steps.shas.outputs.head }}
