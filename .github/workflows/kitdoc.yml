@@ -19,13 +19,18 @@ permissions:
 env:
   KITDOC_REPOSITORY: jonyxnx/hackathon-fintual
   KITDOC_REF: main
+  LLM_PROVIDER: openai
 
 jobs:
   notion-docs:
     name: Document repo with kitdoc
     runs-on: ubuntu-latest
-    # OPENAI_API_KEY, NOTION_TOKEN, and NOTION_PAGE_ID live in the "main" environment.
     environment: main
+
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+      NOTION_PAGE_ID: ${{ secrets.NOTION_PAGE_ID }}
 
     steps:
       - name: Checkout repo
@@ -39,7 +44,6 @@ jobs:
         run: |
           BASE="${{ github.event.inputs.base_sha || github.event.before }}"
           HEAD="${{ github.event.inputs.head_sha || github.sha }}"
-          # First push to a branch reports an all-zero `before` SHA. Fall back to HEAD~1.
           if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
             BASE=$(git rev-parse "${HEAD}^" 2>/dev/null || echo "$HEAD")
           fi
@@ -47,22 +51,36 @@ jobs:
           echo "head=$HEAD" >> "$GITHUB_OUTPUT"
           echo "Using base=$BASE head=$HEAD"
 
-      - name: Generate and sync Notion docs
-        uses: jonyxnx/hackathon-fintual/.github/actions/kitdoc-docs@main
+      - name: Checkout target repository
+        uses: actions/checkout@v4
         with:
-          target-repository: ${{ github.repository }}
-          target-ref: ${{ steps.shas.outputs.head }}
-          kitdoc-repository: ${{ env.KITDOC_REPOSITORY }}
-          kitdoc-ref: ${{ env.KITDOC_REF }}
+          repository: ${{ github.repository }}
+          ref: ${{ steps.shas.outputs.head }}
+          path: target-repo
+          fetch-depth: 0
 
-          base-sha: ${{ steps.shas.outputs.base }}
-          head-sha: ${{ steps.shas.outputs.head }}
-          repo-owner: ${{ github.repository_owner }}
-          repo-name: ${{ github.event.repository.name }}
+      - name: Checkout kitdoc
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.KITDOC_REPOSITORY }}
+          ref: ${{ env.KITDOC_REF }}
+          path: kitdoc
+          fetch-depth: 1
 
-          llm-provider: openai
-          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          depth: "2"
+      - name: Install kitdoc dependencies
+        working-directory: kitdoc
+        run: npm ci
 
-          notion-token: ${{ secrets.NOTION_TOKEN }}
-          notion-page-id: ${{ secrets.NOTION_PAGE_ID }}
+      - name: Generate and sync Notion docs
+        working-directory: kitdoc
+        env:
+          TARGET_DIR: ${{ github.workspace }}/target-repo
+        run: |
+          npm run kitdoc -- \
+            --dir "$TARGET_DIR" \
+            --base "${{ steps.shas.outputs.base }}" \
+            --head "${{ steps.shas.outputs.head }}" \
+            --owner "${{ github.repository_owner }}" \
+            --repo "${{ github.event.repository.name }}" \
+            --provider openai \
+            --depth 2
